@@ -1,0 +1,23 @@
+[
+  { "query": "跑一下今天的每日运价简报", "should_trigger": true },
+  { "query": "generate today's brief 推聊天频道，看看 SCFI 涨没涨", "should_trigger": true },
+  { "query": "08:00 cron 该跑了，手动触发一下场景2", "should_trigger": true },
+  { "query": "运价表更新了，重新生成简报", "should_trigger": true },
+  { "query": "extract today's rates from 运价信息 docx，准备推广", "should_trigger": true },
+  { "query": "把 PIL 红海这一段从 运价表 提出来推广", "should_trigger": true },
+  { "query": "refresh SCFI 然后写今日推广草稿", "should_trigger": true },
+  { "query": "今天有什么好运价能推", "should_trigger": true },
+  { "query": "做一份今天的内部 brief + 客户推广", "should_trigger": true },
+  { "query": "推广审核队列里那条今天的，能 push 一下让业务看吗", "should_trigger": true },
+
+  { "query": "客户线索表新加了 SHEIN，画像 + 开发信", "should_trigger": false },
+  { "query": "看看这个公司 dji.com 适不适合开发", "should_trigger": false },
+  { "query": "qualify this lead — 公司名 Acme", "should_trigger": false },
+  { "query": "客户问我 PIL 红海什么价，回他一下", "should_trigger": false },
+  { "query": "改一下 promotion 模板，加一段新公司介绍", "should_trigger": false },
+  { "query": "查上周三发的简报存档", "should_trigger": false },
+  { "query": "把客户名单 export 成 csv 给销售", "should_trigger": false },
+  { "query": "周日休息，今天不跑 cron 了", "should_trigger": false },
+  { "query": "检查一下 cron 是否启用", "should_trigger": false },
+  { "query": "回复客户上周那封询价邮件", "should_trigger": false }
+]

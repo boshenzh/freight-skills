@@ -1,0 +1,47 @@
+{
+  "skill_name": "freight-lead-profiling",
+  "_comment": "Eval prompts for trigger-rate + output-quality testing. Workspace expected at ~/.openclaw/workspace/shipping-rate-automation/scenarios/scenario-1-lead-profiling/. Run with evals/run-quality-eval.sh.",
+  "evals": [
+    {
+      "id": "lead-with-website",
+      "prompt": "客户线索表新加了一行：公司名 SHEIN，官网 https://www.sheingroup.com，来源渠道 目标客户调研。帮我看看是否适合开发，画像 + 草一封开发信进 待审核。",
+      "expected_output": "A new row in 待审核开发信 with: evidence-backed 主营业务摘要 (fast-fashion / e-commerce export), 市场定位, 潜在需求 (sea LCL / air consol for SKU replenishment), 综合匹配度 score with reasoning, 90-140 word 开发信草稿 invoking SHEIN's actual public-facing characteristics, 审核状态=待审核.",
+      "files": ["evals/files/leads-with-website.csv"],
+      "assertions": [
+        "Draft includes at least one piece of evidence from sheingroup.com or public search results (cite or reference visibly)",
+        "Draft does NOT invent a specific destination port, monthly container volume, or contact name",
+        "Draft length is between 80 and 160 words (or Chinese equivalent)",
+        "Subject line is one clear line tied to company/product/logistics value",
+        "审核状态 written to 待审核开发信 is one of: 待审核 / 需补充信息 / 归档 / 拒绝 — NOT 通过",
+        "If webprofile-pp-cli returned Comtrade data, draft cites at most ONE concrete stat (e.g. '$X imported from China YYYY, +Y% YoY')",
+        "客户线索表 row was NOT modified (facts-only constraint)"
+      ]
+    },
+    {
+      "id": "lead-without-website",
+      "prompt": "客户线索：公司名「广州XX 国际贸易有限公司」，没有官网，来源是展会名单。能查到啥？",
+      "expected_output": "Best-effort web_search; if no reliable public source: 信息获取状态=信息不足, 审核状态=需补充信息, 异常原因 explaining what's missing, basic info retained for traceability, no fabricated 画像.",
+      "files": ["evals/files/leads-without-website.csv"],
+      "assertions": [
+        "信息获取状态 is set to '信息不足' (or equivalent) when no reliable public source found",
+        "审核状态 is '需补充信息' — NOT '待审核' (because there's no useful draft to review)",
+        "异常原因 field contains a concrete reason in business language",
+        "No fabricated logistics specifics (no invented HS code, destination, container type)",
+        "Basic row info (公司名 / 来源渠道) preserved in the queue for traceability"
+      ]
+    },
+    {
+      "id": "lead-non-fit",
+      "prompt": "线索：公司名 'Acme Local Plumbing Services'，官网 https://acmeplumbing.example，做的是本地水管维修。处理一下。",
+      "expected_output": "Recognize this is NOT a freight-forwarding fit (local service business, no export signals). Mark mismatch, do not generate a forced outreach.",
+      "files": ["evals/files/leads-non-fit.csv"],
+      "assertions": [
+        "信息获取状态 is '已获取' (the analysis ran successfully)",
+        "审核状态 is '归档' or '拒绝' — NOT '待审核'",
+        "异常原因 contains '业务不匹配' or equivalent explanation",
+        "No 开发信草稿 forced; skill does NOT fabricate a freight pitch for a non-freight customer",
+        "Customer row retained in the queue for traceability"
+      ]
+    }
+  ]
+}

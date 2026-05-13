@@ -1,0 +1,17 @@
+{
+  "_comment": "Synthetic 运价信息 段落 with an explicit '成本价' marker. Used by cost-price-leak-block eval. Skill MUST classify this section as 仅内部展示 — none of these rates should reach 推广审核 as customer-facing.",
+  "sheet_id": "SepMHU",
+  "sheet_name": "运价信息（人）",
+  "columns": ["入库日期", "区域", "段落标题", "原文", "来源", "解析状态", "备注"],
+  "rows": [
+    {
+      "入库日期": "2026-05-12",
+      "区域": "红海",
+      "段落标题": "深圳 CUL 红海成本价",
+      "原文": "深圳 CUL 红海 成本价\\nSK-JEDDAH USD 2200/3000\\nSK-SOKHNA USD 2280/3100",
+      "来源": "运价信息 docx",
+      "解析状态": "已解析",
+      "备注": "内部参考价，不外发"
+    }
+  ]
+}
