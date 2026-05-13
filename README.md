@@ -69,4 +69,4 @@ See [`docs/prerequisites.md`](docs/prerequisites.md). Short list:
 
 ## License
 
-Apache-2.0. The 5 templates under `templates/` are sanitized industry references — no proprietary content. You may use, adapt, and redistribute freely.
+Apache-2.0. Skill bodies + references contain no proprietary content. You may use, adapt, and redistribute freely. The distilled industry structure templates the agent uses live as markdown under each skill's `references/` directory (e.g. `skills/freight-rate-daily-promotion/references/daily-rate-brief-source.md`) — those are agent-facing specifications, not human-copyable artifacts. A new freight desk gets their initial empty smartsheets directly via the `freight-onboard` skill (no separate xlsx/docx starter files needed).
