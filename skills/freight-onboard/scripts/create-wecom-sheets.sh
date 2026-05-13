@@ -1,96 +1,121 @@
 #!/usr/bin/env bash
-# create-wecom-sheets.sh — attempt to create the 7 required WeCom smartsheets
-# via wecom-cli's smartsheet_create command. Falls back gracefully if the
-# command is unsupported.
+# create-wecom-sheets.sh — populate two operator-provided empty WeCom
+# smartsheet docs with the 7 canonical sub-sheets that the freight skills
+# expect. Driven by sheet-definitions.json (sibling file).
+#
+# Background:
+#   wecom-cli has NO API for creating a smartsheet doc itself. The
+#   operator must manually create 2 empty smartsheet docs in WeCom UI
+#   (one per scenario) and provide their DocIDs. This script then uses:
+#     - smartsheet_add_sheet   to add canonical sub-sheets to each doc
+#     - smartsheet_add_fields  to add columns to each sub-sheet
+#   per https://github.com/WecomTeam/wecom-cli/blob/main/skills/wecomcli-smartsheet/SKILL.md
+#
+# Each freshly-created doc starts with 1 default sub-sheet. This script
+# does NOT touch the default — operator can delete it manually after.
 #
 # Usage:
-#   create-wecom-sheets.sh <company-slug> <out-json>
+#   create-wecom-sheets.sh <scenario_1_docid> <scenario_2_docid> <out-json>
 #
 # Output (stdout):
-#   JSON object with shape:
-#     {
-#       "supported": true|false,
-#       "sheets": [
-#         {"label": "...", "docid": "...", "sheet_id": "..."},
-#         ...
-#       ]
-#     }
-#   If "supported": false, the array is empty and the caller switches to the
-#   manual-fallback flow.
+#   {
+#     "ok": true,
+#     "scenarios": {
+#       "1": {"docid":"...", "sheets":[{"title":"客户线索表","sheet_id":"..."}, ...]},
+#       "2": {"docid":"...", "sheets":[...]}
+#     },
+#     "errors": []
+#   }
+#
+# Errors are non-fatal — script continues to next sheet on failure so
+# partial progress is recoverable.
 
 set -uo pipefail
 
-SLUG="${1:-}"
-OUT="${2:-}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFS="$SCRIPT_DIR/sheet-definitions.json"
 
-if [ -z "$SLUG" ] || [ -z "$OUT" ]; then
-  echo "Usage: $0 <company-slug> <out-json>" >&2
+S1_DOCID="${1:-}"
+S2_DOCID="${2:-}"
+OUT="${3:-}"
+
+if [ -z "$S1_DOCID" ] || [ -z "$S2_DOCID" ] || [ -z "$OUT" ]; then
+  echo "Usage: $0 <scenario_1_docid> <scenario_2_docid> <out-json>" >&2
   exit 2
 fi
 
 if ! command -v wecom-cli >/dev/null 2>&1; then
-  echo '{"supported": false, "reason": "wecom-cli not on PATH"}' | tee "$OUT"
-  exit 0
+  echo '{"ok": false, "reason": "wecom-cli not on PATH"}' | tee "$OUT"
+  exit 1
 fi
 
-# Probe — does wecom-cli expose smartsheet_create at all?
-if ! wecom-cli doc 2>&1 | grep -q "smartsheet_create"; then
-  echo '{"supported": false, "reason": "wecom-cli does not expose doc smartsheet_create"}' | tee "$OUT"
-  exit 0
+if ! [ -f "$DEFS" ]; then
+  echo '{"ok": false, "reason": "sheet-definitions.json not found alongside script"}' | tee "$OUT"
+  exit 1
 fi
 
-# Schema mirrors references/wecom-sheet-schemas.md exactly.
-# Each entry: label | columns (pipe-separated "name:type")
-SHEETS=(
-  "运价表（人）|区域:text|POD:text|船公司:text|20GP:text|40GP:text|40HQ:text|有效期:text|POL:text|超重费标准和其他费用:text"
-  "运价信息（人）|入库日期:text|区域:text|段落标题:text|原文:text|来源:text|解析状态:text|备注:text"
-  "每日简报（AI）|日期:text|简报标题:text|推广审核状态:text|备注:text|更新时间:text"
-  "推广审核（AI+人）|推广标题:text|推广信息草稿:text|内部依据摘要:text|成本价检查:checkbox|审核状态:text|目标客户/分组:text|人工指定发送渠道:text|更新时间:text"
-  "发送记录（AI）|发送时间:text|客户名:text|联系人:text|邮箱:text|航线/区域:text|邮件主题:text|发送状态:text|错误原因:text|回复状态:text"
-  "客户线索表|公司名:text|官网:text|联系人:text|来源渠道:text"
-  "待审核开发信|客户名:text|官网:text|联系人:text|来源渠道:text|信息获取状态:text|主营业务摘要:text|市场定位:text|潜在需求分析:text|与我司业务匹配度:text|画像摘要:text|开发信草稿:text|审核状态:text|人工指定发送渠道:text|异常原因:text|更新时间:text"
-)
-
-results='[]'
-ok_count=0
 err_count=0
+err_log=()
 
-for entry in "${SHEETS[@]}"; do
-  label="${entry%%|*}"
-  rest="${entry#*|}"
+declare -A docids=( [1]="$S1_DOCID" [2]="$S2_DOCID" )
 
-  cols_json='['
-  first=1
-  IFS='|' read -ra parts <<< "$rest"
-  for col in "${parts[@]}"; do
-    name="${col%%:*}"
-    type="${col#*:}"
-    if [ "$first" -eq 1 ]; then first=0; else cols_json+=','; fi
-    cols_json+="{\"name\":\"$name\",\"type\":\"$type\"}"
+result='{"ok": true, "scenarios": {}, "errors": []}'
+
+for scenario in 1 2; do
+  docid="${docids[$scenario]}"
+  scenario_block='{"docid":"'"$docid"'","sheets":[]}'
+
+  sheet_count=$(jq ".scenarios[\"$scenario\"].sheets | length" "$DEFS")
+  for i in $(seq 0 $((sheet_count - 1))); do
+    title=$(jq -r ".scenarios[\"$scenario\"].sheets[$i].title" "$DEFS")
+    fields_json=$(jq -c ".scenarios[\"$scenario\"].sheets[$i].fields" "$DEFS")
+
+    # Step A — create the sub-sheet
+    add_sheet_payload=$(jq -nc --arg docid "$docid" --arg title "$title" \
+      '{docid: $docid, properties: {title: $title}}')
+
+    sheet_resp=$(wecom-cli doc smartsheet_add_sheet "$add_sheet_payload" 2>&1) || sheet_resp="__ERROR__"
+
+    if [ "$sheet_resp" = "__ERROR__" ] || ! echo "$sheet_resp" | jq -e '.errcode == 0' >/dev/null 2>&1; then
+      err_count=$((err_count + 1))
+      err_log+=("scenario=$scenario title=$title add_sheet failed: $sheet_resp")
+      continue
+    fi
+
+    sheet_id=$(echo "$sheet_resp" | jq -r '.sheet_id // .properties.sheet_id // empty')
+    if [ -z "$sheet_id" ]; then
+      err_count=$((err_count + 1))
+      err_log+=("scenario=$scenario title=$title add_sheet returned no sheet_id: $sheet_resp")
+      continue
+    fi
+
+    # Step B — add fields to the new sub-sheet
+    add_fields_payload=$(jq -nc --arg docid "$docid" --arg sheet_id "$sheet_id" --argjson fields "$fields_json" \
+      '{docid: $docid, sheet_id: $sheet_id, fields: $fields}')
+
+    fields_resp=$(wecom-cli doc smartsheet_add_fields "$add_fields_payload" 2>&1) || fields_resp="__ERROR__"
+
+    if [ "$fields_resp" = "__ERROR__" ] || ! echo "$fields_resp" | jq -e '.errcode == 0' >/dev/null 2>&1; then
+      err_count=$((err_count + 1))
+      err_log+=("scenario=$scenario title=$title sheet_id=$sheet_id add_fields failed: $fields_resp")
+    fi
+
+    scenario_block=$(echo "$scenario_block" | jq --arg title "$title" --arg sheet_id "$sheet_id" \
+      '.sheets += [{"title": $title, "sheet_id": $sheet_id}]')
+
+    echo "[ok] scenario=$scenario  $title  sheet_id=$sheet_id" >&2
   done
-  cols_json+=']'
 
-  payload=$(jq -nc --arg title "$label" --argjson cols "$cols_json" \
-    '{title: $title, columns: $cols}')
-
-  resp=$(wecom-cli doc smartsheet_create --json "$payload" 2>&1) || resp="__ERROR__"
-
-  if [ "$resp" = "__ERROR__" ] || ! echo "$resp" | jq -e '.docid // .sheet_id' >/dev/null 2>&1; then
-    err_count=$((err_count + 1))
-    item=$(jq -nc --arg label "$label" --arg err "$resp" \
-      '{label: $label, error: $err}')
-  else
-    ok_count=$((ok_count + 1))
-    item=$(echo "$resp" | jq --arg label "$label" \
-      '{label: $label, docid: (.docid // .doc_id // null), sheet_id: (.sheet_id // .sheetId // null), raw: .}')
-  fi
-
-  results=$(echo "$results" | jq --argjson item "$item" '. + [$item]')
+  result=$(echo "$result" | jq --arg s "$scenario" --argjson block "$scenario_block" \
+    '.scenarios[$s] = $block')
 done
 
-result=$(jq -n --argjson r "$results" --arg slug "$SLUG" \
-  --argjson ok "$ok_count" --argjson err "$err_count" \
-  '{supported: true, slug: $slug, ok: $ok, errors: $err, sheets: $r}')
+if [ "$err_count" -gt 0 ]; then
+  for e in "${err_log[@]}"; do
+    result=$(echo "$result" | jq --arg msg "$e" '.errors += [$msg]')
+  done
+  result=$(echo "$result" | jq '.ok = false')
+fi
 
-echo "$result" | tee "$OUT"
+echo "$result" | jq '.' | tee "$OUT"
 [ "$err_count" -eq 0 ]
