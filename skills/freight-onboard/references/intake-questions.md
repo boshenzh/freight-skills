@@ -22,19 +22,15 @@ Slot filled: `mode` ∈ {A, B}.
 
 Slots filled: `company_full_name`, `company_slug`.
 
-## Q2 · 企微 workspace + 两个 DocID
+## Q2 · 企微 workspace 接入
 
-**Mode A 措辞：**
+**Mode A 措辞**（跳过 — agent 会自动建文档）：
 
-> 我需要您先在企微里**手工建 2 个空 smartsheet 文档**——一个给"拓客"用、一个给"运价推广"用。具体做：
+> Mode A 模式下我会**自动**给您建 2 个空 smartsheet 文档（一个"拓客"、一个"运价推广"），命名 "{公司名} — Scenario N..."。不需要您预先建。等下我会通过 `wecom-cli doc create_doc` 一键创建并填好 7 张子表。
 >
-> 1. 在企微打开您的工作台 → 新建 → 智能表格 → 标题先随便填（比如「freight 拓客」）→ 保存
-> 2. 把这个新建文档的 URL 给我（地址栏里那一长串 `https://doc.weixin.qq.com/smartsheet/s3_...?scode=...`）
-> 3. 再建一个，标题填「freight 运价」之类，URL 也给我
->
-> 为什么手工建——wecom-cli 没有"建顶级文档"的 API，只能往已有文档里加子表。
+> （你只需要确认企微账户有 smartsheet 创建权限——一般每个企微员工默认都有。）
 
-Slots filled: `scenario_1_docid`, `scenario_2_docid` (resolved from URL via `wecom-cli doc info --url ...` or similar). If URL can't be resolved, ask operator to copy the DocID directly from the doc's share dialog.
+Slot filled: 无（无需操作员输入；docids 在 provision 阶段才生成）。
 
 **Mode B 措辞：**
 
@@ -43,9 +39,11 @@ Slots filled: `scenario_1_docid`, `scenario_2_docid` (resolved from URL via `wec
 > 1. **拓客 workbench**（含 客户线索表 / 待审核开发信 之类）的 URL
 > 2. **运价推广 workbench**（含 运价表 / 推广审核 之类）的 URL
 >
+> 把完整 URL 给我（`https://doc.weixin.qq.com/smartsheet/s3_...?scode=...` 这一整串），我直接用 `url` 参数调 wecom-cli，不需要您单独提取 DocID。
+>
 > 如果您只有一个 workbench 把两套表混在一起，告诉我，我适应。
 
-Slots filled: same — `scenario_1_docid`, `scenario_2_docid`. Special-case: if operator reports a single mixed workbench, both slots get the same DocID and Mode B reconcile groups sub-sheets by scenario via naming patterns.
+Slots filled: `scenario_1_workbench_url`, `scenario_2_workbench_url`. Special-case: if operator reports a single mixed workbench, both slots get the same URL and Mode B reconcile groups sub-sheets by scenario via naming patterns.
 
 ## Q3 · 聊天频道（chat channel）
 
@@ -87,18 +85,36 @@ Slot filled: `cron_time`. Default `08:00`.
 
 ## Q8 · 确认 + 开始
 
+**Mode A summary:**
+
 > 总结一下：
-> - 模式: **Mode {mode}**（{A=全新创建 / B=接入现有}）
+> - 模式: **Mode A**（全新创建 — agent 自动建 2 个 doc）
 > - 公司：{company_full_name} (slug: {company_slug})
-> - 拓客 workbench DocID: {scenario_1_docid}
-> - 运价 workbench DocID: {scenario_2_docid}
 > - 简报推送频道: {chat_channel} → {chat_channel_id}
 > - 原始运价目录: {raw_rate_dir}
 > - 审核人: {reviewer_handle}
 > - Cron 时间: 每天 {cron_time} Asia/Shanghai
 >
-> Mode A：我会在 2 个 doc 里各自 add_sheet + add_fields 加规范子表 + 列，渲染 cron。
-> Mode B：我会先 get_sheet + get_fields 拉您现有结构，跟规范对比，给您 diff 报告，逐项让您拍板怎么 reconcile。
+> 我会执行：
+> 1. wecom-cli doc create_doc × 2（命名 "{公司} — Scenario 1 拓客" / "Scenario 2 运价推广"）
+> 2. 给每个 doc 填好规范子表（共 7 张）和它们的列
+> 3. 渲染 cron 配置，注册 OpenClaw cron
+>
+> 确认就回复 "确认"，要改回 "改 X"。
+
+**Mode B summary:**
+
+> 总结一下：
+> - 模式: **Mode B**（接入现有 workbench）
+> - 公司：{company_full_name} (slug: {company_slug})
+> - 拓客 workbench: {scenario_1_workbench_url}
+> - 运价 workbench: {scenario_2_workbench_url}
+> - 简报推送频道: {chat_channel} → {chat_channel_id}
+> - 原始运价目录: {raw_rate_dir}
+> - 审核人: {reviewer_handle}
+> - Cron 时间: 每天 {cron_time} Asia/Shanghai
+>
+> 我会先 get_sheet + get_fields 拉您现有结构，跟规范对比，给您 diff 报告，逐项让您拍板怎么 reconcile（用现有的、改列名对齐、新加缺列、删多余列、新建标准子表、或保留 schema 漂移 + 写映射）。
 >
 > 确认无误回复 `确认` / `yes` / `开始`。需要改哪一项就告诉我。
 

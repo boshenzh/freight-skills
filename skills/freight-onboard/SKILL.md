@@ -1,6 +1,6 @@
 ---
 name: freight-onboard
-description: "Onboard a freight-forwarding company onto this skill plugin — either set up a fresh new company (Mode A: create 7 canonical WeCom sub-sheets across two operator-provided empty smartsheet docs) or adopt an existing manually-maintained WeCom workspace (Mode B: inspect existing sub-sheets, diff against canonical schema, reconcile via add_fields / update_fields with operator approval). Conducts a short conversational intake, writes workspace/wecom/links.md, renders the daily cron config, and hands off with a clear punch-list of operator follow-up. Use when the user says 'set up freight skills for a new company', 'first install for <X 公司>', 'onboard a new freight forwarder', 'adopt existing 企微 workbench for freight skills', 'wire freight-skills to our existing 运价表/客户线索表', '我要给新货代公司装一遍', '把 freight skills 接到我们已有的企微表上'. Do NOT run after onboarding is complete — re-running won't corrupt anything but the entry point for adding incremental fields is `wecom-cli doc smartsheet_add_fields` directly."
+description: "Onboard a freight-forwarding company onto this skill plugin — either set up a fresh new company (Mode A: fully automated — agent creates 2 WeCom smartsheet docs via `wecom-cli doc create_doc` and populates them with the 7 canonical sub-sheets and their columns) or adopt an existing manually-maintained WeCom workspace (Mode B: inspect existing sub-sheets, diff against canonical schema, reconcile via add_fields / update_fields with operator approval). Conducts a short conversational intake, writes workspace/wecom/links.md, renders the daily cron config, and hands off with a clear punch-list of operator follow-up. Use when the user says 'set up freight skills for a new company', 'first install for <X 公司>', 'onboard a new freight forwarder', 'adopt existing 企微 workbench for freight skills', 'wire freight-skills to our existing 运价表/客户线索表', '我要给新货代公司装一遍', '把 freight skills 接到我们已有的企微表上'. Do NOT run after onboarding is complete — re-running won't corrupt anything but the entry point for adding incremental fields is `wecom-cli doc smartsheet_add_fields` directly."
 author: "boshenzh"
 license: "Apache-2.0"
 argument-hint: "<company-slug>"
@@ -54,44 +54,53 @@ Both modes share the conversational intake (skip the 2 docid questions in Mode A
 
 ## Conversational intake (both modes)
 
-8 slots, ask one at a time, validate as you go. Translate engineering terms to freight-ops Chinese ("DocID" → "企微文档 ID"; "sub-sheet" → "子表"; "field" → "列"). Full wording: `references/intake-questions.md`.
+7 slots, ask one at a time, validate as you go. Translate engineering terms to freight-ops Chinese ("DocID" → "企微文档 ID"; "sub-sheet" → "子表"; "field" → "列"). Full wording: `references/intake-questions.md`.
 
 | Slot | Example | Notes |
 |---|---|---|
 | `company_slug` | `orientlinkage` | lowercase, hyphens OK, no spaces |
 | `company_full_name` | `东方联动国际货运代理有限公司` | non-empty |
-| `scenario_1_docid` | `REDACTED-DOCID...` | Mode A: operator pre-creates 1 empty smartsheet doc in 企微 UI and gives DocID. Mode B: operator's existing 拓客 workbench DocID. |
-| `scenario_2_docid` | `REDACTED-DOCID...` | Mode A: same — pre-creates 1 empty doc. Mode B: existing 运价 workbench DocID. |
+| `scenario_1_workbench_url` | `https://doc.weixin.qq.com/smartsheet/s3_...` | **Mode B only** — operator's existing 拓客 workbench URL. **Skipped in Mode A** (agent creates the doc automatically). |
+| `scenario_2_workbench_url` | `https://doc.weixin.qq.com/smartsheet/s3_...` | **Mode B only** — operator's existing 运价 workbench URL. **Skipped in Mode A**. |
 | `chat_channel` | `telegram` / `feishu` / `wecom` / `dingtalk` | One of the supported set |
 | `chat_channel_id` | chat ID or webhook URL | Format depends on channel |
 | `reviewer_handle` | operator's WeCom/email for 待审核 notifications | non-empty |
 | `cron_time` | `08:00` (Asia/Shanghai) | `HH:MM`; default 08:00 |
 
-> Why operator-provided DocIDs (not auto-create): **`wecom-cli` has no API to create a top-level smartsheet doc.** It can only add sub-sheets and fields *inside* an existing doc. So the operator clicks "新建智能表格" in 企微 UI twice (once per scenario), gives us the resulting DocIDs, and the agent fills the docs in.
+## Mode A: Provision 2 docs + 7 canonical sub-sheets (fully automated)
 
-## Mode A: Provision 7 canonical sub-sheets
-
-Driver: `scripts/create-wecom-sheets.sh` reads `scripts/sheet-definitions.json` and provisions both docs in one call.
+Driver: `scripts/create-wecom-sheets.py` does everything — `wecom-cli doc create_doc` creates the two top-level smartsheet docs, then for each scenario provisions the canonical sub-sheets and their columns. **No manual 企微 UI step required.**
 
 ```bash
 ONBOARD="$(dirname "$0")"
 OUT=$(mktemp -t freight-onboard-XXXXXX.json)
-bash "$ONBOARD/scripts/create-wecom-sheets.sh" \
-  "$scenario_1_docid" \
-  "$scenario_2_docid" \
-  "$OUT"
+python3 "$ONBOARD/scripts/create-wecom-sheets.py" \
+  --company-slug "$company_slug" \
+  --company-name "$company_full_name" \
+  --out "$OUT"
 ```
 
-What the script does for each scenario:
+What the script does internally, per scenario (×2):
 
-1. For each canonical sub-sheet (7 total — 2 in scenario 1, 5 in scenario 2):
-   - `wecom-cli doc smartsheet_add_sheet '{"docid":"...","properties":{"title":"<canonical name>"}}'` → returns new `sheet_id`
-   - `wecom-cli doc smartsheet_add_fields '{"docid":"...","sheet_id":"...","fields":[...]}'` → adds the canonical column list (see `scripts/sheet-definitions.json`)
-2. Errors per sheet are non-fatal — script continues; failures listed in output JSON's `errors` array.
+1. `wecom-cli doc create_doc '{"doc_type":10,"doc_name":"<company> — Scenario N <wf>"}'` → returns new `docid` + `url`. Doc comes with one default sub-sheet titled `智能表1` containing one default field titled `文本`.
+2. For the **first** canonical sub-sheet (scenario 1: 客户线索表, scenario 2: 运价表（人）):
+   - `smartsheet_update_sheet` rename `智能表1` → canonical title
+   - `smartsheet_update_fields` rename default `文本` field → first canonical field title
+   - `smartsheet_add_fields` add remaining N-1 canonical fields in one call
+3. For **each subsequent** canonical sub-sheet:
+   - `smartsheet_add_sheet` create new sub-sheet → returns `sheet_id`. The new sub-sheet auto-creates one default field titled `智能表列`.
+   - `smartsheet_update_fields` rename `智能表列` → first canonical field title
+   - `smartsheet_add_fields` add remaining N-1 canonical fields
+4. Returns JSON:
+   ```json
+   {"ok":true,"company_slug":"...","company_name":"...",
+    "scenarios":{"1":{"docid":"...","url":"...","sheets":[{"title":"客户线索表","sheet_id":"..."},...]},
+                 "2":{...}}}
+   ```
 
-Note: each newly-created smartsheet doc starts with **one default sub-sheet** (empty, default name). The script does NOT touch it. After the script succeeds, the punch-list includes "delete the default empty sub-sheet" as an optional cleanup step.
+After the script succeeds, the operator gets **2 brand-new clean smartsheet docs** with all 7 canonical sub-sheets correctly named and column-shaped. No leftover default columns, no leftover `智能表1` titles.
 
-Parse the output JSON to extract DocIDs and sheet_ids and feed them into the links.md writer (next section).
+The script handles `wecom-cli`'s MCP JSON-RPC envelope (extracts `.result.content[0].text` and re-parses as JSON) and checks `.errcode == 0` on every call. Failures raise with the failing payload so the operator can re-run after fixing auth/network.
 
 ## Mode B: Adopt existing workbench
 
@@ -209,21 +218,26 @@ Print to operator in freight-ops Chinese at the end:
 2. **客户线索**：在企微 `客户线索表` 子表（DocID `$scenario_1_docid` / sheet_id `$leads_sheet_id`）里手工填客户线索。**只填事实**：公司名 / 官网 / 联系人 / 来源渠道——AI 不会写这张表。
 3. **聊天频道 bot token**：在 OpenClaw 配置 (`~/.openclaw/openclaw.json`) 里设好 `$chat_channel` 的 token / webhook secret。具体配法见 `freight-skills/docs/prerequisites.md` § "{chat_channel}"。
 4. **(可选) Firecrawl API key**：`export FIRECRAWL_API_KEY=fc-...`（freight-lead-profiling 的网页抓取走 firecrawl CLI，没 key 会退到 web_fetch fallback）。
-5. **Mode A only — 删除默认空 sub-sheet**（可选清理）：每个 doc 创建时默认带一个空子表，agent 没动它。您可以在企微 UI 里手动删掉，让 doc 只含 7 张规范子表。或者留着不影响功能。
-6. **Mode B only — 数据迁移**：如果 reconcile 时操作员选择"新建标准子表"，旧子表里的数据不会自动迁移。需要手工 export + 重新 import，或 sql-style 转换。agent 不做这一步。
-7. **触发一次 cron 验证**：`openclaw cron run <new cron id>`。预期：聊天频道收到完整简报正文 (plain text, 不带附件)。
+5. **Mode B only — 数据迁移**：如果 reconcile 时操作员选择"新建标准子表"，旧子表里的数据不会自动迁移。需要手工 export + 重新 import，或 sql-style 转换。agent 不做这一步。
+6. **触发一次 cron 验证**：`openclaw cron run <new cron id>`。预期：聊天频道收到完整简报正文 (plain text, 不带附件)。
 
 ## Gotchas
 
+These are concrete corrections to mistakes the agent will make without being told. Every entry verified by end-to-end testing against live wecom-cli.
+
 - **Detection must be all-or-nothing.** Partial state → STOP, ask operator to reset. Half-configured is worse than zero.
-- **`wecom-cli` does NOT have `smartsheet_create` for top-level docs.** Top-level docs are operator-created in 企微 UI. The CLI only manages sub-sheets and fields **within** an existing doc. Do not try to invent a `smartsheet_create` API call — it'll fail with "unknown subcommand".
+- **`wecom-cli` wraps every response in an MCP JSON-RPC envelope.** Stdout shape is `{"jsonrpc":"2.0","result":{"content":[{"text":"<inner-JSON-as-string>","type":"text"}],"isError":false}}`. The real payload is the JSON-encoded string at `.result.content[0].text` — you must parse that string a second time to get `{errcode, errmsg, ...}`. Always check `.errcode == 0`; nonzero means failure. `create-wecom-sheets.py` handles this via `json.loads(json.loads(stdout)["result"]["content"][0]["text"])`.
+- **Every newly-created sub-sheet has exactly one default field**, and you must rename it before adding others (or you'll end up with an unwanted junk column).
+   - Default sub-sheet that comes with `create_doc(doc_type=10)`: titled `智能表1`, has one default field titled `文本`.
+   - Sub-sheet created by `smartsheet_add_sheet`: gets one default field titled `智能表列`.
+   - Correct sequence per sub-sheet: `smartsheet_get_fields` → grab the single default `field_id` → `smartsheet_update_fields` rename to first canonical field title → `smartsheet_add_fields` add remaining N-1 fields. Skipping the rename creates a junk column.
+- **`create_doc`'s default sub-sheet title `智能表1` is not your canonical name.** Always `smartsheet_update_sheet` rename to your first canonical sub-sheet title (e.g. `客户线索表` for scenario 1).
 - **`smartsheet_update_fields` cannot change `field_type`.** Per [upstream skill doc](https://github.com/WecomTeam/wecom-cli/blob/main/skills/wecomcli-smartsheet/SKILL.md): "只能改名，不能改类型 (field_type 必须传原始类型)". If Mode B reconcile detects a type mismatch, the only options are: create a new column of the right type + (optionally) delete the old one, or accept the mismatch and let operational skills coerce at read time.
 - **`smartsheet_delete_sheet` / `smartsheet_delete_fields` / `smartsheet_delete_records` are irreversible.** Mode B's reconcile MUST get per-item operator confirmation before any delete. Never bulk-delete on the assumption that "the operator probably wants this cleaned up."
-- **Each new doc has 1 default sub-sheet** (created when operator clicks "新建智能表格" in 企微 UI). `create-wecom-sheets.sh` ignores it — adds 2 (scenario 1) / 5 (scenario 2) canonical sub-sheets alongside. Operator can delete the default later.
 - **`field_title` cannot be updated to its current value** (per upstream — passing the same title to `smartsheet_update_fields` errors). Skip the rename if the current title already matches the canonical.
-- **DocID resolution**: `wecom-cli` accepts either `docid` or `url` to identify a doc. URLs look like `https://doc.weixin.qq.com/smartsheet/s3_<base64>?scode=<token>` — the actual DocID is internal and revealed only via `wecom-cli doc info --url <url>` (or similar). When operator provides a URL, resolve to DocID first; never persist URLs in links.md (they contain `scode` tokens which expire).
+- **DocID resolution**: `wecom-cli` accepts either `docid` or `url` to identify a doc. URLs look like `https://doc.weixin.qq.com/smartsheet/s3_<base64>?scode=<token>` — the actual DocID is returned by `create_doc` (only at creation time — store it safely). For Mode B existing-workbench input, the operator pastes the URL; the agent uses `url` directly in each API call (don't try to extract a DocID from the URL — the `s3_*` segment is NOT the DocID). Never persist URLs in `links.md` (they contain `scode` tokens which expire); persist the DocID instead.
 - **`+smartsheet_add_records_auto_file`** — the `+` prefix is a wecom-cli local helper convention. Use these helpers for any record that includes image/file local paths; non-`+` `smartsheet_add_records` doesn't auto-upload local files.
-- **Idempotency**: this skill does NOT clean up on operator abort. To retry from scratch, operator deletes `workspace/wecom/links.md` first. To retry Mode B reconcile after a partial run, operator marks already-done sheets in the next iteration's intake.
+- **Idempotency**: this skill does NOT clean up on operator abort. To retry from scratch, operator deletes `workspace/wecom/links.md` first AND deletes the 2 partially-provisioned docs from 企微 UI (or accepts they'll dangle). To retry Mode B reconcile after a partial run, operator marks already-done sheets in the next iteration's intake.
 
 ## What this skill does NOT do
 

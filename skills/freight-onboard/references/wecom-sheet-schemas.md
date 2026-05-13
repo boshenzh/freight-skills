@@ -9,6 +9,27 @@ All 7 sub-sheets live **inside** 2 operator-pre-created smartsheet docs (one per
 
 Machine-readable version (used by `scripts/create-wecom-sheets.sh`): `scripts/sheet-definitions.json`.
 
+## Default-sub-sheet / default-field handling
+
+When a new smartsheet doc is created or a sub-sheet is added, **wecom-cli auto-creates a default field**:
+
+| Trigger | Resulting default |
+|---|---|
+| `wecom-cli doc create_doc --json '{"doc_type":10,...}'` | doc + 1 default sub-sheet titled `智能表1` containing 1 default field titled `文本` (FIELD_TYPE_TEXT) |
+| `wecom-cli doc smartsheet_add_sheet ...` | new sub-sheet titled as requested, containing 1 default field titled `智能表列` (FIELD_TYPE_TEXT) |
+
+**Rule for every new sub-sheet**: rename the default field to your first canonical field title BEFORE calling `add_fields` for the remaining fields. Otherwise you'll end up with a leftover junk column.
+
+Correct sequence:
+
+1. `smartsheet_get_fields` → there's exactly 1 default field; grab its `field_id`
+2. `smartsheet_update_fields` → rename it to your **first** canonical `field_title` (must use the existing `field_type` — wecom-cli doesn't allow retype)
+3. `smartsheet_add_fields` → add the **remaining** N-1 canonical fields in one batch call
+
+For the first sub-sheet within a freshly-created doc (the default `智能表1`), also call `smartsheet_update_sheet` to rename the sub-sheet itself to the canonical title (e.g. `客户线索表`).
+
+`scripts/create-wecom-sheets.py` implements this dance correctly. If you are running these calls by hand (e.g. for one-off schema repairs), follow the same order.
+
 ## Column types — wecom-cli `FIELD_TYPE_*` enums
 
 Per [upstream `wecomcli-smartsheet` SKILL.md](https://github.com/WecomTeam/wecom-cli/blob/main/skills/wecomcli-smartsheet/SKILL.md) and its [`smartsheet-field-types.md`](https://github.com/WecomTeam/wecom-cli/blob/main/skills/wecomcli-smartsheet/references/smartsheet-field-types.md) (canonical), the 7 sheets use only:
