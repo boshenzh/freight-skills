@@ -1,0 +1,12 @@
+{
+  "_comment": "Synthetic representation of 运价表(SHEET_RATE_TABLE) — used by eval harness in place of the real .xlsx when the test runner cannot read WeCom. Rows mirror the 9-column schema documented in SKILL.md §'Scenario 2 WeCom workbench'.",
+  "sheet_id": "SHEET_RATE_TABLE",
+  "sheet_name": "运价表（人）",
+  "columns": ["区域", "POD", "船公司", "20GP", "40GP", "40HQ", "有效期", "POL", "超重费标准和其他费用"],
+  "rows": [
+    {"区域": "红海", "POD": "JEDDAH", "船公司": "PIL", "20GP": "2650", "40GP": "3450", "40HQ": "3450", "有效期": "2026-03-17", "POL": "SK", "超重费标准和其他费用": "AQJ 已含 EIS USD100/200"},
+    {"区域": "红海", "POD": "SOKHNA", "船公司": "PIL", "20GP": "2700", "40GP": "3500", "40HQ": "3500", "有效期": "2026-03-17", "POL": "SK", "超重费标准和其他费用": ""},
+    {"区域": "红海", "POD": "DJIBOUTI", "船公司": "PIL", "20GP": "3475", "40GP": "4435", "40HQ": "4435", "有效期": "2026-03-24", "POL": "SK", "超重费标准和其他费用": "直航"},
+    {"区域": "印巴", "POD": "KARACHI", "船公司": "TSL", "20GP": "1850", "40GP": "2450", "40HQ": "2450", "有效期": "2026-03-20", "POL": "NS", "超重费标准和其他费用": ""}
+  ]
+}

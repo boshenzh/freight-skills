@@ -1,0 +1,23 @@
+[
+  { "query": "客户线索表新加了 SHEIN，官网 sheingroup.com，帮我看看适不适合开发", "should_trigger": true },
+  { "query": "看看这个公司 https://www.dji.com 我们有没有机会做他们的物流", "should_trigger": true },
+  { "query": "拓客一下，看下展会拿到的这 5 个买家", "should_trigger": true },
+  { "query": "qualify this lead — 公司名 Acme Apparel Ltd, looks like they export to Europe", "should_trigger": true },
+  { "query": "帮我画像 + 写个开发信，目标是 Pakistani electronics importer", "should_trigger": true },
+  { "query": "看下 hisense.com 是否值得开发，红海方向他们出货量大不大", "should_trigger": true },
+  { "query": "research this prospect: BYD AUTO INDIA — should we pitch?", "should_trigger": true },
+  { "query": "我刚收到一封展会名片，公司是 'Mohamed Trading LLC'，写一封 first-touch 试试", "should_trigger": true },
+  { "query": "查一下 SHEIN 在 Comtrade 上的进口数据，顺便草个开发信", "should_trigger": true },
+  { "query": "comments from the booth: this company looks promising for our 中东 lanes — can you draft outreach?", "should_trigger": true },
+
+  { "query": "今天的运价简报发了吗", "should_trigger": false },
+  { "query": "请把今天 SK 出红海的推广整理一下", "should_trigger": false },
+  { "query": "客户 SHEIN 问我下周三的 vessel 还有舱位吗", "should_trigger": false },
+  { "query": "把这封客户回信翻译成英文", "should_trigger": false },
+  { "query": "查 SHEIN 公司去年财报，看看营收增速", "should_trigger": false },
+  { "query": "audit 一下我们客户数据库，看哪些是僵尸客户", "should_trigger": false },
+  { "query": "schedule a Zoom with the client X tomorrow 10am", "should_trigger": false },
+  { "query": "对比 PIL 红海 vs CMA 红海运价，做个表给业务", "should_trigger": false },
+  { "query": "回复客户 last week 那封询价邮件，告诉他下周报价", "should_trigger": false },
+  { "query": "批量发推广邮件给客户名单 list_q2.csv", "should_trigger": false }
+]

@@ -1,0 +1,50 @@
+{
+  "skill_name": "freight-rate-daily-promotion",
+  "_comment": "Eval prompts for trigger-rate + output-quality testing. Run with the agentskills.io eval harness per docs/onboarding.md → 'evaluating skills'. Workspace expected at ~/.openclaw/workspace/shipping-rate-automation/. Test fixtures (sample 运价表/运价信息) live under evals/files/ and are NOT committed (real customer pricing).",
+  "evals": [
+    {
+      "id": "daily-brief-happy-path",
+      "prompt": "今天 08:00 cron 触发，跑场景2 每日运价简报：双源读 运价表(SHEET_RATE_TABLE) + 运价信息(SHEET_RATE_INFO)，SCFI 拉取 + CLS 校验都正常，生成简报推聊天频道 + 写 5 列 index + 推广审核。",
+      "expected_output": "Plain-text 简报 sent to the configured chat channel (NOT as attachment); 5-column row appended to 每日简报 sheet SHEET_DAILY_BRIEF; 推广草稿 row appended to 推广审核 sheet SHEET_PROMO_REVIEW with 状态=待审核; no customer email sent.",
+      "files": ["evals/files/rate-table-happy.json", "evals/files/rate-info-happy.json"],
+      "assertions": [
+        "Chat-channel message body is plain text — no markdown headers, no fenced code blocks, no tables, no emoji",
+        "Chat-channel message does NOT use MEDIA: or .txt attachment (must be inline chat body)",
+        "First line of 简报 is '场景2 每日运价简报 YYYY-MM-DD' (date matches today, Asia/Shanghai)",
+        "Blocks in 简报 are separated by '-------------------------'",
+        "简报 blocks are organized by 船司 + 区域 (e.g. 'PIL 红海', 'KMTC 红海中转船') — NOT by POD",
+        "No occurrence of '成本价' / '底价' / '采购价' / '拿价' / 'cost' / 'net' / '内部' / '利润' / '加价' in the customer-facing promotion draft written to 推广审核",
+        "每日简报 row written to SHEET_DAILY_BRIEF contains exactly 5 fields: 日期 / 简报标题 / 推广审核状态 / 备注 / 更新时间 — no 简报正文 column",
+        "推广审核 row status is '待审核' or '需补充信息' — NOT '通过'",
+        "No customer email was sent (cron's 'absolute never' rule)",
+        "SCFI 拉取 attempt was made and logged in run-status.md (either succeeded or fail-soft message captured)",
+        "CLS 校验 attempt was made for each unique (POL, carrier) combo and logged"
+      ]
+    },
+    {
+      "id": "daily-brief-scfi-failure",
+      "prompt": "同样的 08:00 cron 触发，但 freightindex-pp-cli 这次拉取失败（mock 网络错误）。",
+      "expected_output": "Brief still generated; market-context section reads '今日 SCFI 数据暂缺（原因：<one-line reason>）' (or equivalent); the rest of the brief proceeds normally; cron is not aborted.",
+      "files": ["evals/files/rate-table-happy.json", "evals/files/rate-info-happy.json"],
+      "assertions": [
+        "Brief was generated despite SCFI failure (fail-soft rule honored)",
+        "Market context section in brief reads 'SCFI 数据暂缺' with a one-line reason — NOT a fabricated SCFI value",
+        "run-status.md captures the actual SCFI fetch error stderr/stdout",
+        "Chat-channel delivery still happened with the brief body",
+        "推广审核 row still written (SCFI absence does not block customer promotion)"
+      ]
+    },
+    {
+      "id": "cost-price-leak-block",
+      "prompt": "运价表段标题写着 '深圳 CUL 红海成本价'，价格列 USD2200/3000。生成今日推广信息。",
+      "expected_output": "Section flagged 成本价 → all rows are 仅内部展示, NOT to 推广候选. 推广审核 written with status=需补充信息 + 异常原因 explaining the section was internal-cost-only.",
+      "files": ["evals/files/rate-info-cost-section.json"],
+      "assertions": [
+        "No row from the '成本价' section appears in the 推广信息 draft",
+        "推广审核 row status is '需补充信息' (no customer-safe rate to push that block)",
+        "异常原因 field contains language identifying the cost-only section in business terms (e.g. '该航线源段标注成本价，未提供卖价，无法外发')",
+        "Brief still generated; 内部 brief段 may contain the cost rates with explicit label '内部仅供参考'"
+      ]
+    }
+  ]
+}

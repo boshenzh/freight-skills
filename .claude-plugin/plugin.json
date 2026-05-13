@@ -1,0 +1,9 @@
+{
+  "name": "freight-skills",
+  "version": "0.1.0",
+  "description": "Industry-generic ocean-freight forwarder skills — lead profiling (拓客), daily rate brief + promotion (每日运价推广), conversational onboarding for fresh company installs. Designed to be forked or layered with a per-company binding repo (real WeCom DocIDs / chat channel IDs / raw templates).",
+  "author": "boshenzh",
+  "license": "Apache-2.0",
+  "repository": "boshenzh/freight-skills",
+  "homepage": "https://github.com/boshenzh/freight-skills"
+}
