@@ -15,7 +15,7 @@ github.com/<your-org>/freight-<your-company>  (PRIVATE)             ← you crea
 
 ## Steps
 
-### 1. Install freight-skills as a plugin (Layer 2.5)
+### 1. Install freight-skills + companion plugins
 
 ```bash
 openclaw plugins install --marketplace boshenzh/freight-skills
