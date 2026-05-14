@@ -98,7 +98,7 @@ Slot filled: `cron_time`. Default `08:00`.
 > 我会执行：
 > 1. wecom-cli doc create_doc × 2（命名 "{公司} — Scenario 1 拓客" / "Scenario 2 运价推广"）
 > 2. 给每个 doc 填好规范子表（共 7 张）和它们的列
-> 3. 渲染 cron 配置，注册 OpenClaw cron
+> 3. 注册 OpenClaw 每日 cron（agent 直接调 `openclaw cron add`，message 用通用模板，不含任何公司数据）
 >
 > 确认就回复 "确认"，要改回 "改 X"。
 

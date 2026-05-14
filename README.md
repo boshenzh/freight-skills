@@ -21,8 +21,9 @@ Three pieces:
 3. **Tell the agent to onboard you**
 
 ```bash
-# Plugin install (example — OpenClaw)
-openclaw plugins install --marketplace boshenzh/freight-skills
+# Plugin install (example — OpenClaw): clone the repo, install from the local path
+git clone https://github.com/boshenzh/freight-skills.git
+openclaw plugins install -l ./freight-skills
 openclaw config set plugins.allow '["freight-skills"]'   # merge with your existing allow list
 
 # Trigger onboarding — the agent runs the cold-start interview
@@ -37,10 +38,13 @@ If your company already has 企微 sheets you've been maintaining manually, the 
 
 ```bash
 git clone https://github.com/boshenzh/freight-skills.git
-# Then symlink the relevant SKILL.md into the runtime's skill directory:
+
+# OpenClaw — install the clone as a plugin (skills load from ~/.openclaw/extensions/):
+openclaw plugins install -l ./freight-skills
+
+# Other runtimes — symlink each SKILL.md into the runtime's skill directory:
 #   Codex:        ~/.codex/skills/<name>/SKILL.md
 #   Claude Code:  ~/.claude/skills/<name>/SKILL.md
-#   OpenClaw:     ~/.agents/skills/<name>/SKILL.md
 ```
 
 ## Prerequisites
@@ -59,7 +63,7 @@ See [`docs/prerequisites.md`](docs/prerequisites.md) for per-tool install. Short
 ```
 freight-skills (public)                              your-company/freight-<co> (private)
 ├── SKILL.md (workflow logic)                        ├── workspace-seed/wecom/links.md (real DocIDs)
-└── reads from:                                      ├── cron/freight-rate-daily.json (real chat ID)
+└── reads from:                                      ├── cron/cron-params.json (real chat ID + model)
     ~/.openclaw/workspace/.../wecom/links.md   ◄──── ├── scripts/install.sh (seeds the workspace)
                                                      └── workspace-seed/raw-templates/ (your private docs)
 ```

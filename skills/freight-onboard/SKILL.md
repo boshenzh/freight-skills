@@ -33,8 +33,8 @@ test -f "$LINKS" && ! grep -q '<填入' "$LINKS" 2>/dev/null && echo "EXISTS: $L
 # B. Cron job already registered?
 openclaw cron list 2>/dev/null | grep -q "freight-rate-daily" && echo "CRON: registered"
 
-# C. Skill symlinks resolved?
-test -e "$HOME/.agents/skills/freight-rate-daily-promotion" && echo "SKILL: linked"
+# C. freight-skills plugin installed?
+openclaw plugins list 2>/dev/null | grep -q "freight-skills" && echo "SKILL: plugin installed"
 ```
 
 - **All three indicate configured** → STOP. Tell operator "freight already configured for <company>. To add fields to an existing sheet use `wecom-cli doc smartsheet_add_fields` directly. To re-onboard with different DocIDs, delete `$LINKS` first."
@@ -197,18 +197,37 @@ If Mode B included any column-name mapping (operator kept their schema), append 
 
 The operational skills read this file before any `wecom-cli doc smartsheet_*` call.
 
-## Render the cron config
+## Register the daily cron
+
+The daily brief runs as an OpenClaw cron job. Register it **directly** with `openclaw cron add` — there is no rendered config file. The `--message` payload is the company-agnostic template shipped with the operational skill; every DocID/sheet_id is resolved at run time from `wecom/links.md`, so the message carries no company data.
 
 ```bash
-python3 "$(dirname "$0")/scripts/render-cron-config.py" \
-  --company-slug "$company_slug" \
-  --chat-channel "$chat_channel" \
-  --chat-id "$chat_channel_id" \
-  --cron-time "$cron_time" \
-  --out "$WS/../../cron/freight-rate-daily.json"
+# Generic message template — shipped alongside the operational skill, no company data in it
+CRON_MSG_FILE="$(dirname "$0")/../freight-rate-daily-promotion/references/cron-message.md"
 
-openclaw cron add --from-json "$WS/../../cron/freight-rate-daily.json"
+JOB_NAME="${company_slug}-daily-rate-brief"
+# cron_time is HH:MM → "MM HH * * *"
+CRON_EXPR="$(echo "$cron_time" | awk -F: '{print $2" "$1" * * *"}')"
+
+# openclaw cron commands require the Gateway to be running
+openclaw cron list >/dev/null 2>&1 || {
+  echo "OpenClaw Gateway not reachable — start it (openclaw gateway start), then re-run cron registration"
+  exit 1
+}
+
+# Idempotent: cron rm / cron edit take a job *id*, not a name — look the id up by name first
+EXISTING=$(openclaw cron list --json | jq -r --arg n "$JOB_NAME" '.[]|select(.name==$n)|.id')
+[ -n "$EXISTING" ] && openclaw cron rm "$EXISTING"
+
+openclaw cron add --name "$JOB_NAME" --cron "$CRON_EXPR" --tz Asia/Shanghai \
+  --session isolated --timeout-seconds 900 \
+  --announce --channel "$chat_channel" --to "$chat_channel_id" \
+  --message "$(cat "$CRON_MSG_FILE")"
 ```
+
+Notes:
+- `--model` is omitted here, so the job runs on OpenClaw's configured default model. To pin a specific model add `--model <alias>` (and record it in your binding repo's `cron/cron-params.json` when you snapshot — see `docs/how-to-fork.md`).
+- `openclaw cron add` generates the job id. `cron rm` / `cron edit` take that **id**, not the name — hence the `cron list --json` lookup above.
 
 ## Hand-off punch list
 
@@ -219,7 +238,7 @@ Print to operator in freight-ops Chinese at the end:
 3. **聊天频道 bot token**：在 OpenClaw 配置 (`~/.openclaw/openclaw.json`) 里设好 `$chat_channel` 的 token / webhook secret。具体配法见 `freight-skills/docs/prerequisites.md` § "{chat_channel}"。
 4. **(可选) Firecrawl API key**：`export FIRECRAWL_API_KEY=fc-...`（freight-lead-profiling 的网页抓取走 firecrawl CLI，没 key 会退到 web_fetch fallback）。
 5. **Mode B only — 数据迁移**：如果 reconcile 时操作员选择"新建标准子表"，旧子表里的数据不会自动迁移。需要手工 export + 重新 import，或 sql-style 转换。agent 不做这一步。
-6. **触发一次 cron 验证**：`openclaw cron run <new cron id>`。预期：聊天频道收到完整简报正文 (plain text, 不带附件)。
+6. **触发一次 cron 验证**：`openclaw cron run "$(openclaw cron list --json | jq -r --arg n "${company_slug}-daily-rate-brief" '.[]|select(.name==$n)|.id')"`。预期：聊天频道收到一条消息——有运价数据是完整简报正文 (plain text, 不带附件)；无数据则是「今日无运价数据上传」跳过提示。
 
 ## Gotchas
 

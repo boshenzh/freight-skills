@@ -18,9 +18,13 @@ github.com/<your-org>/freight-<your-company>  (PRIVATE)             ← you crea
 ### 1. Install freight-skills + companion plugins
 
 ```bash
-openclaw plugins install --marketplace boshenzh/freight-skills
-openclaw plugins install --marketplace boshenzh/agent-infra-skills
-openclaw plugins install --marketplace boshenzh/ocean-pp-cli
+# Clone each plugin repo, then install from the local path with -l
+git clone https://github.com/boshenzh/freight-skills.git
+git clone https://github.com/boshenzh/agent-infra-skills.git
+git clone https://github.com/boshenzh/ocean-pp-cli.git
+openclaw plugins install -l ./freight-skills
+openclaw plugins install -l ./agent-infra-skills
+openclaw plugins install -l ./ocean-pp-cli
 openclaw config set plugins.allow '["freight-skills","agent-infra-skills","ocean-pp-cli"]'
 ```
 
@@ -32,7 +36,7 @@ openclaw chat "Onboard a new freight company for <your-company>"
 
 The `freight-onboard` skill (in this plugin) detects the fresh-install state and walks you through 8 intake questions, creates 7 WeCom smartsheets, writes `~/.openclaw/workspace/shipping-rate-automation/wecom/links.md`, and renders a cron config.
 
-If `wecom-cli` on your VPS doesn't expose `smartsheet_create`, the skill switches to manual-fallback mode and prints precise instructions for creating each sheet in the WeCom UI; you paste each new DocID back.
+If `wecom-cli` on your VPS can't reach the WeCom backend (auth expired, network blocked, API rejection), the skill switches to manual-fallback mode and prints precise instructions for creating each sheet in the WeCom UI; you paste each new DocID back.
 
 ### 3. Snapshot the resulting binding as a private repo
 
@@ -47,9 +51,18 @@ mkdir -p workspace-seed
 cp -r ~/.openclaw/workspace/shipping-rate-automation/wecom workspace-seed/
 cp -r ~/.openclaw/workspace/shipping-rate-automation/knowledge-base workspace-seed/
 
-# Copy the cron config rendered during onboard
+# Capture the per-company cron parameters into cron/cron-params.json
 mkdir -p cron
-cp ~/.openclaw/cron/jobs/<your-cron-job-id>.json cron/freight-rate-daily.json
+cat > cron/cron-params.json <<'JSON'
+{
+  "job_name": "freight-<your-company>-daily-rate-brief",
+  "cron_expr": "0 8 * * *",
+  "tz": "Asia/Shanghai",
+  "model": "<model alias OpenClaw should run the job with>",
+  "chat_channel": "<telegram|feishu|wecom|dingtalk>",
+  "chat_id": "<chat id or webhook URL>"
+}
+JSON
 
 # Copy raw rate templates (private)
 mkdir -p workspace-seed/raw-templates
@@ -68,7 +81,7 @@ gh repo create <your-org>/freight-<your-company> --private --source . --push
 |---|---|
 | The skill workflow logic / Gotchas / output format | `freight-skills` (upstream — open a PR if you want it merged) |
 | Your company's WeCom DocIDs (after creating new sheets) | `freight-<your-company>/workspace-seed/wecom/links.md` |
-| The 08:00 cron time, chat channel, chat ID | `freight-<your-company>/cron/freight-rate-daily.json` |
+| The 08:00 cron time, chat channel, chat ID, model | `freight-<your-company>/cron/cron-params.json` |
 | Your private rate templates / service agreements | `freight-<your-company>/workspace-seed/raw-templates/` |
 | The customer leads in 客户线索表 | WeCom UI directly — never via skill, never via git |
 
@@ -77,7 +90,7 @@ gh repo create <your-org>/freight-<your-company> --private --source . --push
 You could `git clone freight-skills && rm -rf .git && git init` and add your DocIDs to SKILL.md. **Don't do that.** Reasons:
 
 1. You lose upstream improvements (firecrawl integration, new Gotchas, schema-evolution fixes) — every upstream patch becomes a manual cherry-pick.
-2. Your private fork would contain real DocIDs in `skills/*/SKILL.md` — those files end up symlinked into `~/.agents/skills/`, where any reader of the symlink target can see your bindings.
+2. Your private fork would contain real DocIDs in `skills/*/SKILL.md` — and once that fork is installed as an OpenClaw plugin, those files sit unredacted under `~/.openclaw/extensions/`, where anyone with shell access can read your bindings.
 3. The "skill body = industry contract; workspace = company binding" split is the same separation `claude-for-legal/<domain>-legal` uses. Stay on the upstream pattern.
 
 ## Reference implementation

@@ -1,6 +1,6 @@
 ---
 name: freight-rate-daily-promotion
-description: Run the daily freight-rate brief + customer promotion workflow — read WeCom 事实源 (运价表 + 运价信息 dual-source), pull SCFI market context, sanity-check 船期/CLS, classify 成本价 vs 卖价, generate the internal 简报 as plain text for the configured chat channel (Telegram / 飞书 / 企业微信 / 钉钉 etc., per cron.delivery.channel), and queue customer-safe 推广 copy to 推广审核 for human approval. Use when the user mentions 每日运价简报, daily rate promotion, 运价表/运价信息, 推广草稿, 推广审核, 简报, or asks to "generate today's brief / extract rates / push promotion for review / refresh SCFI". Triggers automatically via 08:00 Asia/Shanghai cron (job id REDACTED-CRON-UUID...). Do NOT use this skill to directly email customers — the human approval gate (推广审核 → 通过) is mandatory; AI never bypasses it.
+description: Run the daily freight-rate brief + customer promotion workflow — read WeCom 事实源 (运价表 + 运价信息 dual-source), pull SCFI market context, sanity-check 船期/CLS, classify 成本价 vs 卖价, generate the internal 简报 as plain text for the configured chat channel (Telegram / 飞书 / 企业微信 / 钉钉 etc., per cron.delivery.channel), and queue customer-safe 推广 copy to 推广审核 for human approval. Use when the user mentions 每日运价简报, daily rate promotion, 运价表/运价信息, 推广草稿, 推广审核, 简报, or asks to "generate today's brief / extract rates / push promotion for review / refresh SCFI". Triggers automatically via the daily 08:00 Asia/Shanghai cron. Do NOT use this skill to directly email customers — the human approval gate (推广审核 → 通过) is mandatory; AI never bypasses it.
 ---
 
 # Freight Rate Daily Promotion / 场景2 每日运价整理 + 推广
@@ -114,7 +114,7 @@ References load on demand. Each file pulls into context only when the trigger co
 
 ## Available scripts
 
-Scripts live under `scripts/`. Invoke from the skill directory or via the absolute path `$HOME/.agents/skills/freight-rate-daily-promotion/scripts/<name>`.
+Scripts live under `scripts/`. Invoke them with a path relative to the skill directory — `scripts/<name>` — not an absolute path (the skill's install location varies by runtime).
 
 | Script | Purpose | Invocation |
 |---|---|---|
@@ -126,6 +126,18 @@ Scripts live under `scripts/`. Invoke from the skill directory or via the absolu
 
 ### 1. Locate and extract sources
 
+**Empty-state guard — check this FIRST, before housekeeping or anything else.** If `raw/source-files/` contains no `运价表*.xlsx` and no `运价信息*.docx`:
+
+- This is the normal state on day 1 (operator hasn't dropped files yet) and on any day nobody uploaded rates. It is **not** an error.
+- **Do NOT silently abort.** Post one short plain-text message to the configured chat channel (`cron.delivery.channel`), e.g.:
+  ```
+  场景2 每日运价简报 YYYY-MM-DD
+  今日无运价数据上传，简报跳过。
+  ```
+  Then exit cleanly (success, not failure).
+- Skip SCFI/CLS calls and all sheet writes — there is nothing to brief on.
+- Rationale: a silent abort is indistinguishable from "the cron never fired." An observable skip message tells the operator the automation is alive and simply had no input today.
+
 1. Find the latest `运价表*.xlsx` and/or `运价信息*.docx` unless the user provides paths.
 2. Run `scripts/extract_rate_inputs.py` to produce:
    - normalized JSON (`daily-rate-extract.json`)
@@ -135,7 +147,7 @@ Scripts live under `scripts/`. Invoke from the skill directory or via the absolu
 Example:
 
 ```bash
-python3 $HOME/.agents/skills/freight-rate-daily-promotion/scripts/extract_rate_inputs.py \
+python3 scripts/extract_rate_inputs.py \
   --input-dir $HOME/.openclaw/workspace/shipping-rate-automation/raw/source-files \
   --out-dir $HOME/.openclaw/workspace/shipping-rate-automation/scenarios/scenario-2-daily-rate-promotion/runs/$(date +%F)
 ```
@@ -337,7 +349,7 @@ Only after approval:
 
 ## 08:30 automation design (2026-05-11 重构)
 
-每日定时任务流水线（cron `REDACTED-CRON-UUID...` 跑 codex `openai-codex/gpt-5.5`）：
+每日定时任务流水线（每日 08:00 Asia/Shanghai cron 触发，模型由 cron 配置指定）：
 
 1. **Housekeeping**：tar+rm 30 天前的 run 文件夹（见下方）。
 2. **双源读**：从 workspace/wecom/links.md 解析出 运价表（人）和 运价信息（人） 的 sheet_id，再 `wecom-cli doc smartsheet_get_records` 同时拉它们。

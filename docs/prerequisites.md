@@ -8,20 +8,33 @@ These tools must be installed on the VPS before the skills can function. The `fr
 
 Agent runtime. Skill discovery, cron scheduling, plugin install. Install per OpenClaw docs.
 
+**The Gateway must be running.** Every `openclaw cron` command — registration *and* the scheduled trigger itself — talks to the OpenClaw Gateway. If it's down, `openclaw cron list/add` fails with "gateway closed" and scheduled jobs never fire. Start it with `openclaw gateway start`. On a VPS, run the Gateway under a process supervisor (a systemd unit on Linux, a launchd plist on macOS) so it restarts after a crash or reboot — otherwise a Gateway that quietly dies takes the daily brief down with it. Writing that supervisor unit is per-VPS ops, out of scope for this repo.
+
 ### wecom-cli
 
-WeCom 企业微信 smartsheet read/write. The `freight-onboard` skill calls `wecom-cli doc smartsheet_create` (if supported) or falls back to manual create instructions. The two operational skills call `wecom-cli doc smartsheet_get_records` / `smartsheet_add_records` / `smartsheet_update_records` / `smartsheet_get_fields`.
+WeCom 企业微信 smartsheet read/write. `freight-onboard` (Mode A) calls `wecom-cli doc create_doc` to create the 2 workbench docs, then `smartsheet_add_sheet` / `smartsheet_add_fields` to provision the sub-sheets. The two operational skills call `smartsheet_get_records` / `smartsheet_add_records` / `smartsheet_update_records` / `smartsheet_get_fields`.
 
 Install via your internal channel (private binary).
 
-### Chat channel bot
+**Auth — `wecom-cli init`.** wecom-cli must be logged in to the WeCom account that owns the workspace before it can read/write real DocIDs. Run its interactive auth flow (`wecom-cli init`) **as the same OS user OpenClaw runs as** — an isolated cron session inherits that user's `$HOME`, so the token/session it picks up must belong to that user. If a cron run reports an auth error (errcode `40001` / `40014` / `41001` etc.), re-run `wecom-cli init`.
 
-One of: Telegram bot, 飞书 webhook bot, 企微 group bot, 钉钉 custom bot.
+### Chat channel
 
-- **Telegram**: create a bot via @BotFather, get the bot token + your chat ID. Configure both in OpenClaw's delivery layer (`~/.openclaw/openclaw.json` or env).
-- **飞书 / 企微 / 钉钉**: create a group custom bot, copy the webhook URL.
+The daily 简报 is delivered to one chat channel: Telegram / 飞书 / 企微 group bot / 钉钉. The channel is registered with OpenClaw via `openclaw channels add`; the cron job's `--channel` + `--to` then point at it.
 
-The `freight-onboard` skill asks you which channel and prompts for the right kind of ID/URL.
+- **Telegram**: create a bot via @BotFather, get the bot token. Register it:
+  ```bash
+  openclaw channels add --channel telegram --token <bot-token>
+  # or: --token-file <path>   or: --use-env  (read the token from an env var)
+  ```
+  The cron's `--to` is your numeric chat ID.
+- **飞书 / 企微 / 钉钉**: create a group custom bot, copy its webhook URL. Register the channel per OpenClaw's docs for that channel type; the cron's `--to` is the webhook URL.
+
+`freight-onboard` asks which channel and prompts for the right kind of ID/URL, then registers the cron with `--channel` + `--to`. It does **not** create the bot or run `openclaw channels add` for you — that's a one-time manual step.
+
+### Model provider
+
+The daily cron runs an agent turn on a specific model — `openclaw cron add --model <alias>` (the binding repo pins this in `cron/cron-params.json`; `freight-onboard` omits it and uses OpenClaw's default). Whatever alias you use, OpenClaw must be able to route it: the provider and its API key live in OpenClaw's own config (`~/.openclaw/openclaw.json` or env), **not** in this repo. Verify with `openclaw models list` — the alias the cron uses must appear. A cron pinned to a model OpenClaw can't route fails every morning.
 
 ## Industry data CLIs (required for scenario 2)
 

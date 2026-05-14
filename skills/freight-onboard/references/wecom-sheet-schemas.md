@@ -1,13 +1,10 @@
 # WeCom smartsheet schemas — canonical column structures
 
-The 7 canonical sub-sheets `freight-onboard` creates (Mode A) or reconciles against (Mode B). Schemas mirror two production reference workbenches:
+The 7 canonical sub-sheets `freight-onboard` creates (Mode A) or reconciles against (Mode B). The schemas documented below are the canonical contract — in Mode A the agent provisions exactly these; in Mode B it reconciles the operator's existing sheets against them.
 
-- **Scenario 2** (运价推广 — 5 sheets): https://doc.weixin.qq.com/smartsheet/s3_REDACTED-WORKBENCH
-- **Scenario 1** (拓客 — 2 sheets): https://doc.weixin.qq.com/smartsheet/s3_REDACTED-WORKBENCH
+All 7 sub-sheets live **inside** 2 smartsheet docs (one per scenario). In **Mode A** the agent creates those 2 docs itself via `wecom-cli doc create_doc` (`doc_type=10`), then provisions the canonical sub-sheets and fields via `smartsheet_add_sheet` + `smartsheet_add_fields`. In **Mode B** the operator's existing docs are used as-is.
 
-All 7 sub-sheets live **inside** 2 operator-pre-created smartsheet docs (one per scenario). `wecom-cli` has no API for top-level doc creation — operator does that in 企微 UI; the agent then provisions sub-sheets and fields via `smartsheet_add_sheet` + `smartsheet_add_fields`.
-
-Machine-readable version (used by `scripts/create-wecom-sheets.sh`): `scripts/sheet-definitions.json`.
+Machine-readable version (used by `scripts/create-wecom-sheets.py`): `scripts/sheet-definitions.json`.
 
 ## Default-sub-sheet / default-field handling
 
@@ -162,7 +159,7 @@ The one CHECKBOX (`成本价检查`) is a hard quality gate — AI sets it true 
 
 To add or change a canonical column, follow this order:
 
-1. Update `scripts/sheet-definitions.json` (the machine-readable source of truth that `create-wecom-sheets.sh` uses)
+1. Update `scripts/sheet-definitions.json` (the machine-readable source of truth that `create-wecom-sheets.py` uses)
 2. Update this file to match (the human-readable contract)
 3. Update the corresponding operational skill (`freight-lead-profiling` or `freight-rate-daily-promotion`) to consume the new column
 4. Tag a new freight-skills release
